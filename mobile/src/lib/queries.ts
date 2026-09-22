@@ -1,7 +1,8 @@
 import type { Database } from "sql.js";
 import { getDb, persist } from "./db";
 import type {
-  Category,
+  Caisse,
+  CaisseWithBalance,
   Loan,
   LoanDirection,
   LoanRepayment,
@@ -9,7 +10,7 @@ import type {
   Settings,
   Transaction,
   TransactionType,
-  TransactionWithCategory,
+  TransactionWithCaisse,
 } from "./types";
 
 type SqlParam = string | number | null;
@@ -55,34 +56,74 @@ export async function updateSettings(currency: string, householdName: string) {
   );
 }
 
-// ---------- Categories ----------
+// ---------- Caisses ----------
 
-export async function listCategories(type?: TransactionType): Promise<Category[]> {
+function withBalance(
+  row: Caisse & { income: number; expense: number }
+): CaisseWithBalance {
+  return {
+    ...row,
+    balance: Math.round((row.income - row.expense) * 100) / 100,
+  };
+}
+
+const CAISSE_BALANCE_SELECT = `
+  SELECT ca.*,
+    COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'income'), 0) as income,
+    COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense
+  FROM caisses ca
+`;
+
+export async function listCaisses(): Promise<Caisse[]> {
   const db = await getDb();
-  if (type) {
-    return queryAll<Category>(
-      db,
-      "SELECT * FROM categories WHERE type = ? AND archived = 0 ORDER BY name",
-      [type]
-    );
-  }
-  return queryAll<Category>(
+  return queryAll<Caisse>(
     db,
-    "SELECT * FROM categories WHERE archived = 0 ORDER BY type, name"
+    "SELECT * FROM caisses WHERE archived = 0 ORDER BY name"
   );
 }
 
-export async function createCategory(name: string, type: TransactionType) {
+export async function listCaissesWithBalance(): Promise<CaisseWithBalance[]> {
   const db = await getDb();
-  await run(db, "INSERT INTO categories (name, type) VALUES (?, ?)", [
-    name,
-    type,
-  ]);
+  const rows = queryAll<Caisse & { income: number; expense: number }>(
+    db,
+    `${CAISSE_BALANCE_SELECT} WHERE ca.archived = 0 ORDER BY ca.name`
+  );
+  return rows.map(withBalance);
 }
 
-export async function archiveCategory(id: number) {
+export async function getCaisseWithBalance(
+  id: number
+): Promise<CaisseWithBalance | undefined> {
   const db = await getDb();
-  await run(db, "UPDATE categories SET archived = 1 WHERE id = ?", [id]);
+  const row = queryOne<Caisse & { income: number; expense: number }>(
+    db,
+    `${CAISSE_BALANCE_SELECT} WHERE ca.id = ?`,
+    [id]
+  );
+  return row ? withBalance(row) : undefined;
+}
+
+export async function createCaisse(name: string) {
+  const db = await getDb();
+  const existing = queryOne<{ id: number; archived: number }>(
+    db,
+    "SELECT id, archived FROM caisses WHERE name = ? COLLATE NOCASE",
+    [name]
+  );
+  if (existing) {
+    if (existing.archived) {
+      await run(db, "UPDATE caisses SET archived = 0 WHERE id = ?", [
+        existing.id,
+      ]);
+    }
+    return;
+  }
+  await run(db, "INSERT INTO caisses (name) VALUES (?)", [name]);
+}
+
+export async function archiveCaisse(id: number) {
+  const db = await getDb();
+  await run(db, "UPDATE caisses SET archived = 1 WHERE id = ?", [id]);
 }
 
 // ---------- Contacts ----------
@@ -110,16 +151,31 @@ async function findOrCreateContact(
 
 export async function listTransactions(
   limit?: number
-): Promise<TransactionWithCategory[]> {
+): Promise<TransactionWithCaisse[]> {
   const db = await getDb();
   const sql = `
-    SELECT t.*, c.name as category_name
+    SELECT t.*, ca.name as caisse_name
     FROM transactions t
-    LEFT JOIN categories c ON c.id = t.category_id
+    LEFT JOIN caisses ca ON ca.id = t.caisse_id
     ORDER BY t.date DESC, t.id DESC
     ${limit ? "LIMIT ?" : ""}
   `;
-  return queryAll<TransactionWithCategory>(db, sql, limit ? [limit] : []);
+  return queryAll<TransactionWithCaisse>(db, sql, limit ? [limit] : []);
+}
+
+export async function listTransactionsByCaisse(
+  caisseId: number
+): Promise<TransactionWithCaisse[]> {
+  const db = await getDb();
+  return queryAll<TransactionWithCaisse>(
+    db,
+    `SELECT t.*, ca.name as caisse_name
+     FROM transactions t
+     LEFT JOIN caisses ca ON ca.id = t.caisse_id
+     WHERE t.caisse_id = ?
+     ORDER BY t.date DESC, t.id DESC`,
+    [caisseId]
+  );
 }
 
 export async function getTransaction(id: number): Promise<Transaction | undefined> {
@@ -133,7 +189,7 @@ export interface TransactionInput {
   type: TransactionType;
   amount: number;
   date: string;
-  categoryId: number | null;
+  caisseId: number;
   description: string | null;
 }
 
@@ -141,9 +197,9 @@ export async function createTransaction(input: TransactionInput) {
   const db = await getDb();
   await run(
     db,
-    `INSERT INTO transactions (type, amount, date, category_id, description)
+    `INSERT INTO transactions (type, amount, date, caisse_id, description)
      VALUES (?, ?, ?, ?, ?)`,
-    [input.type, input.amount, input.date, input.categoryId, input.description]
+    [input.type, input.amount, input.date, input.caisseId, input.description]
   );
 }
 
@@ -152,13 +208,13 @@ export async function updateTransaction(id: number, input: TransactionInput) {
   await run(
     db,
     `UPDATE transactions
-     SET type = ?, amount = ?, date = ?, category_id = ?, description = ?
+     SET type = ?, amount = ?, date = ?, caisse_id = ?, description = ?
      WHERE id = ?`,
     [
       input.type,
       input.amount,
       input.date,
-      input.categoryId,
+      input.caisseId,
       input.description,
       id,
     ]
@@ -271,8 +327,9 @@ export interface DashboardData {
   monthExpense: number;
   totalOwedToUs: number;
   totalWeOwe: number;
-  recentTransactions: TransactionWithCategory[];
+  recentTransactions: TransactionWithCaisse[];
   activeLoans: LoanWithDetails[];
+  caisses: CaisseWithBalance[];
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -341,5 +398,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     totalWeOwe: Math.round(totalWeOwe * 100) / 100,
     recentTransactions: await listTransactions(8),
     activeLoans: activeLoans.slice(0, 6),
+    caisses: await listCaissesWithBalance(),
   };
 }

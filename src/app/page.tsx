@@ -11,7 +11,9 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-2xl bg-emerald-600 text-white p-5 shadow-sm">
-        <p className="text-sm text-emerald-100">Solde actuel de la caisse</p>
+        <p className="text-sm text-emerald-100">
+          Solde total (toutes les caisses)
+        </p>
         <p className="text-3xl font-bold mt-1">
           {formatAmount(data.balance, currency)}
         </p>
@@ -117,6 +119,36 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {data.caisses.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-semibold">Caisses</h2>
+            <Link href="/caisses" className="text-sm text-emerald-600">
+              Tout voir
+            </Link>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {data.caisses.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/caisses/${c.id}`}
+                  className="flex items-center justify-between rounded-xl border border-black/10 dark:border-white/10 px-3 py-2"
+                >
+                  <p className="font-medium">{c.name}</p>
+                  <p
+                    className={`font-semibold ${
+                      c.balance >= 0 ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {formatAmount(c.balance, currency)}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section>
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-semibold">Dernières opérations</h2>
@@ -138,7 +170,7 @@ export default function DashboardPage() {
               >
                 <div>
                   <p className="font-medium">
-                    {t.category_name ?? (t.type === "expense" ? "Dépense" : "Recette")}
+                    {t.caisse_name ?? (t.type === "expense" ? "Dépense" : "Recette")}
                   </p>
                   <p className="text-xs text-neutral-500">
                     {formatDate(t.date)}

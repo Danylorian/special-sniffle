@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   addRepayment,
-  archiveCategory,
-  createCategory,
+  archiveCaisse,
+  createCaisse,
   createLoan,
   createTransaction,
   deleteLoan,
@@ -37,14 +37,17 @@ export async function createTransactionAction(formData: FormData) {
   }
   const amount = parseAmount(formData.get("amount"));
   const date = str(formData.get("date")) ?? new Date().toISOString().slice(0, 10);
-  const categoryRaw = formData.get("categoryId");
-  const categoryId = categoryRaw ? Number(categoryRaw) : null;
+  const caisseId = Number(formData.get("caisseId"));
+  if (!caisseId) {
+    throw new Error("La caisse est obligatoire.");
+  }
   const description = str(formData.get("description"));
 
-  createTransaction({ type, amount, date, categoryId, description });
+  createTransaction({ type, amount, date, caisseId, description });
 
   revalidatePath("/");
   revalidatePath("/transactions");
+  revalidatePath("/caisses");
   redirect("/transactions");
 }
 
@@ -55,14 +58,17 @@ export async function updateTransactionAction(
   const type = String(formData.get("type")) as TransactionType;
   const amount = parseAmount(formData.get("amount"));
   const date = str(formData.get("date")) ?? new Date().toISOString().slice(0, 10);
-  const categoryRaw = formData.get("categoryId");
-  const categoryId = categoryRaw ? Number(categoryRaw) : null;
+  const caisseId = Number(formData.get("caisseId"));
+  if (!caisseId) {
+    throw new Error("La caisse est obligatoire.");
+  }
   const description = str(formData.get("description"));
 
-  updateTransaction(id, { type, amount, date, categoryId, description });
+  updateTransaction(id, { type, amount, date, caisseId, description });
 
   revalidatePath("/");
   revalidatePath("/transactions");
+  revalidatePath("/caisses");
   redirect("/transactions");
 }
 
@@ -71,6 +77,7 @@ export async function deleteTransactionAction(formData: FormData) {
   deleteTransaction(id);
   revalidatePath("/");
   revalidatePath("/transactions");
+  revalidatePath("/caisses");
   redirect("/transactions");
 }
 
@@ -119,24 +126,22 @@ export async function deleteLoanAction(formData: FormData) {
   redirect("/prets");
 }
 
-// ---------- Categories ----------
+// ---------- Caisses ----------
 
-export async function createCategoryAction(formData: FormData) {
+export async function createCaisseAction(formData: FormData) {
   const name = str(formData.get("name"));
-  const type = String(formData.get("type")) as TransactionType;
-  if (!name) throw new Error("Le nom de la catégorie est obligatoire.");
-  if (type !== "expense" && type !== "income") {
-    throw new Error("Type de catégorie invalide.");
-  }
-  createCategory(name, type);
-  revalidatePath("/categories");
+  if (!name) throw new Error("Le nom de la caisse est obligatoire.");
+  createCaisse(name);
+  revalidatePath("/caisses");
+  revalidatePath("/");
   revalidatePath("/transactions/nouvelle");
 }
 
-export async function archiveCategoryAction(formData: FormData) {
+export async function archiveCaisseAction(formData: FormData) {
   const id = Number(formData.get("id"));
-  archiveCategory(id);
-  revalidatePath("/categories");
+  archiveCaisse(id);
+  revalidatePath("/caisses");
+  revalidatePath("/");
   revalidatePath("/transactions/nouvelle");
 }
 

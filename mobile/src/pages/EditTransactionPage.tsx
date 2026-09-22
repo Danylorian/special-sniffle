@@ -4,10 +4,10 @@ import TransactionForm from "../components/TransactionForm";
 import {
   deleteTransaction,
   getTransaction,
-  listCategories,
+  listCaisses,
   updateTransaction,
 } from "../lib/queries";
-import type { Category, Transaction, TransactionType } from "../lib/types";
+import type { Caisse, Transaction, TransactionType } from "../lib/types";
 
 export default function EditTransactionPage() {
   const { id } = useParams();
@@ -15,8 +15,7 @@ export default function EditTransactionPage() {
   const navigate = useNavigate();
 
   const [transaction, setTransaction] = useState<Transaction | null>(null);
-  const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
-  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
+  const [caisses, setCaisses] = useState<Caisse[]>([]);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
@@ -27,29 +26,28 @@ export default function EditTransactionPage() {
       }
       setTransaction(t);
     });
-    listCategories("expense").then(setExpenseCategories);
-    listCategories("income").then(setIncomeCategories);
+    listCaisses().then(setCaisses);
   }, [transactionId]);
 
   async function handleSubmit(formData: FormData) {
     const type = String(formData.get("type")) as TransactionType;
     const amount = Number(String(formData.get("amount")).replace(",", "."));
     const date = String(formData.get("date"));
-    const categoryRaw = formData.get("categoryId");
-    const categoryId = categoryRaw ? Number(categoryRaw) : null;
+    const caisseId = Number(formData.get("caisseId"));
     const description = String(formData.get("description") || "").trim() || null;
 
     await updateTransaction(transactionId, {
       type,
       amount,
       date,
-      categoryId,
+      caisseId,
       description,
     });
     navigate("/transactions");
   }
 
   async function handleDelete() {
+    if (!confirm("Supprimer cette opération ?")) return;
     await deleteTransaction(transactionId);
     navigate("/transactions");
   }
@@ -70,14 +68,13 @@ export default function EditTransactionPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold">Modifier l&apos;opération</h1>
       <TransactionForm
-        expenseCategories={expenseCategories}
-        incomeCategories={incomeCategories}
+        caisses={caisses}
         defaultType={transaction.type}
         onSubmit={handleSubmit}
         initialValues={{
           amount: transaction.amount,
           date: transaction.date,
-          categoryId: transaction.category_id,
+          caisseId: transaction.caisse_id,
           description: transaction.description,
         }}
         submitLabel="Mettre à jour"

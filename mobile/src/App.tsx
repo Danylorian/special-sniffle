@@ -8,7 +8,8 @@ import EditTransactionPage from "./pages/EditTransactionPage";
 import LoansList from "./pages/LoansList";
 import LoanFormPage from "./pages/LoanFormPage";
 import LoanDetail from "./pages/LoanDetail";
-import CategoriesPage from "./pages/CategoriesPage";
+import CaissesPage from "./pages/CaissesPage";
+import CaisseDetail from "./pages/CaisseDetail";
 import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
@@ -24,7 +25,8 @@ export default function App() {
             <Route path="/prets" element={<LoansList />} />
             <Route path="/prets/nouveau" element={<LoanFormPage />} />
             <Route path="/prets/:id" element={<LoanDetail />} />
-            <Route path="/categories" element={<CategoriesPage />} />
+            <Route path="/caisses" element={<CaissesPage />} />
+            <Route path="/caisses/:id" element={<CaisseDetail />} />
             <Route path="/parametres" element={<SettingsPage />} />
           </Route>
         </Routes>

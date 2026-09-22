@@ -1,25 +1,30 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listTransactions } from "../lib/queries";
-import type { TransactionWithCategory } from "../lib/types";
+import type { TransactionWithCaisse } from "../lib/types";
 import { useSettings } from "../lib/SettingsContext";
 import { formatAmount, formatDate } from "../lib/money";
+import DeleteTransactionButton from "../components/DeleteTransactionButton";
 
 export default function TransactionsList() {
   const { settings } = useSettings();
-  const [transactions, setTransactions] = useState<TransactionWithCategory[] | null>(
+  const [transactions, setTransactions] = useState<TransactionWithCaisse[] | null>(
     null
   );
 
-  useEffect(() => {
+  function reload() {
     listTransactions().then(setTransactions);
+  }
+
+  useEffect(() => {
+    reload();
   }, []);
 
   if (!transactions || !settings) {
     return <p className="text-sm text-neutral-500 text-center py-10">Chargement…</p>;
   }
 
-  const grouped = new Map<string, TransactionWithCategory[]>();
+  const grouped = new Map<string, TransactionWithCaisse[]>();
   for (const t of transactions) {
     if (!grouped.has(t.date)) grouped.set(t.date, []);
     grouped.get(t.date)!.push(t);
@@ -57,24 +62,27 @@ export default function TransactionsList() {
             </p>
             <ul className="flex flex-col gap-2">
               {items.map((t) => (
-                <li key={t.id}>
+                <li
+                  key={t.id}
+                  className="flex items-center gap-1 rounded-xl border border-black/10 dark:border-white/10 pr-1"
+                >
                   <Link
                     to={`/transactions/${t.id}`}
-                    className="flex items-center justify-between rounded-xl border border-black/10 dark:border-white/10 px-3 py-2"
+                    className="flex flex-1 items-center justify-between px-3 py-2 min-w-0"
                   >
-                    <div>
-                      <p className="font-medium">
-                        {t.category_name ??
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">
+                        {t.caisse_name ??
                           (t.type === "expense" ? "Dépense" : "Recette")}
                       </p>
                       {t.description && (
-                        <p className="text-xs text-neutral-500">
+                        <p className="text-xs text-neutral-500 truncate">
                           {t.description}
                         </p>
                       )}
                     </div>
                     <p
-                      className={`font-semibold ${
+                      className={`shrink-0 pl-2 font-semibold ${
                         t.type === "expense"
                           ? "text-red-600"
                           : "text-emerald-600"
@@ -84,6 +92,7 @@ export default function TransactionsList() {
                       {formatAmount(t.amount, settings.currency)}
                     </p>
                   </Link>
+                  <DeleteTransactionButton id={t.id} onDeleted={reload} />
                 </li>
               ))}
             </ul>

@@ -1,32 +1,32 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import TransactionForm from "../components/TransactionForm";
-import { createTransaction, listCategories } from "../lib/queries";
-import type { Category, TransactionType } from "../lib/types";
+import { createTransaction, listCaisses } from "../lib/queries";
+import type { Caisse, TransactionType } from "../lib/types";
 
 export default function NewTransactionPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const defaultType: TransactionType =
     searchParams.get("type") === "income" ? "income" : "expense";
+  const defaultCaisseId = searchParams.get("caisse")
+    ? Number(searchParams.get("caisse"))
+    : undefined;
 
-  const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
-  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
+  const [caisses, setCaisses] = useState<Caisse[]>([]);
 
   useEffect(() => {
-    listCategories("expense").then(setExpenseCategories);
-    listCategories("income").then(setIncomeCategories);
+    listCaisses().then(setCaisses);
   }, []);
 
   async function handleSubmit(formData: FormData) {
     const type = String(formData.get("type")) as TransactionType;
     const amount = Number(String(formData.get("amount")).replace(",", "."));
     const date = String(formData.get("date"));
-    const categoryRaw = formData.get("categoryId");
-    const categoryId = categoryRaw ? Number(categoryRaw) : null;
+    const caisseId = Number(formData.get("caisseId"));
     const description = String(formData.get("description") || "").trim() || null;
 
-    await createTransaction({ type, amount, date, categoryId, description });
+    await createTransaction({ type, amount, date, caisseId, description });
     navigate("/transactions");
   }
 
@@ -34,9 +34,9 @@ export default function NewTransactionPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold">Nouvelle opération</h1>
       <TransactionForm
-        expenseCategories={expenseCategories}
-        incomeCategories={incomeCategories}
+        caisses={caisses}
         defaultType={defaultType}
+        defaultCaisseId={defaultCaisseId}
         onSubmit={handleSubmit}
         submitLabel="Enregistrer"
       />

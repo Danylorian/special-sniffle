@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listTransactions, getSettings } from "@/lib/queries";
 import { formatAmount, formatDate } from "@/lib/money";
+import DeleteTransactionButton from "@/components/DeleteTransactionButton";
 
 export default function TransactionsPage() {
   const settings = getSettings();
@@ -45,24 +46,27 @@ export default function TransactionsPage() {
             </p>
             <ul className="flex flex-col gap-2">
               {items.map((t) => (
-                <li key={t.id}>
+                <li
+                  key={t.id}
+                  className="flex items-center gap-1 rounded-xl border border-black/10 dark:border-white/10 pr-1"
+                >
                   <Link
                     href={`/transactions/${t.id}`}
-                    className="flex items-center justify-between rounded-xl border border-black/10 dark:border-white/10 px-3 py-2"
+                    className="flex flex-1 items-center justify-between px-3 py-2 min-w-0"
                   >
-                    <div>
-                      <p className="font-medium">
-                        {t.category_name ??
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">
+                        {t.caisse_name ??
                           (t.type === "expense" ? "Dépense" : "Recette")}
                       </p>
                       {t.description && (
-                        <p className="text-xs text-neutral-500">
+                        <p className="text-xs text-neutral-500 truncate">
                           {t.description}
                         </p>
                       )}
                     </div>
                     <p
-                      className={`font-semibold ${
+                      className={`shrink-0 pl-2 font-semibold ${
                         t.type === "expense"
                           ? "text-red-600"
                           : "text-emerald-600"
@@ -72,6 +76,7 @@ export default function TransactionsPage() {
                       {formatAmount(t.amount, settings.currency)}
                     </p>
                   </Link>
+                  <DeleteTransactionButton id={t.id} />
                 </li>
               ))}
             </ul>

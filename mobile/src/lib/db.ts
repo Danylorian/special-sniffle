@@ -58,6 +58,12 @@ const SCHEMA = `
     archived INTEGER NOT NULL DEFAULT 0
   );
 
+  CREATE TABLE IF NOT EXISTS caisses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+
   CREATE TABLE IF NOT EXISTS contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -100,39 +106,86 @@ const SCHEMA = `
   );
 `;
 
-const DEFAULT_CATEGORIES: Array<[string, "expense" | "income"]> = [
-  ["Loyer", "expense"],
-  ["Électricité", "expense"],
-  ["Eau", "expense"],
-  ["Ingrédients / cuisine", "expense"],
-  ["Achats boissons", "expense"],
-  ["Transport", "expense"],
-  ["Autres dépenses", "expense"],
-  ["Vente de plats", "income"],
-  ["Vente de boissons", "income"],
-  ["Autres recettes", "income"],
-];
+const DEFAULT_CAISSES = ["Cuisine", "Boissons", "Maïs", "Général"];
+
+function columnExists(db: Database, table: string, column: string): boolean {
+  const res = db.exec(`PRAGMA table_info(${table})`);
+  if (res.length === 0) return false;
+  const nameIdx = res[0].columns.indexOf("name");
+  return res[0].values.some((row) => row[nameIdx] === column);
+}
 
 async function initializeDb(SQL: SqlJsStatic, existing?: Uint8Array) {
   const db = new SQL.Database(existing);
   db.run(SCHEMA);
+
+  let dirty = !existing;
+
+  if (!columnExists(db, "transactions", "caisse_id")) {
+    db.run("ALTER TABLE transactions ADD COLUMN caisse_id INTEGER REFERENCES caisses(id)");
+    dirty = true;
+  }
 
   const settingsRow = db.exec("SELECT id FROM settings WHERE id = 1");
   if (settingsRow.length === 0) {
     db.run(
       "INSERT INTO settings (id, currency, household_name) VALUES (1, 'FCFA', 'Ma caisse')"
     );
+    dirty = true;
   }
 
-  const countRes = db.exec("SELECT COUNT(*) FROM categories");
-  const count = countRes.length ? Number(countRes[0].values[0][0]) : 0;
-  if (count === 0) {
-    for (const [name, type] of DEFAULT_CATEGORIES) {
-      db.run("INSERT INTO categories (name, type) VALUES (?, ?)", [name, type]);
+  const caisseCountRes = db.exec("SELECT COUNT(*) FROM caisses");
+  const caisseCount = caisseCountRes.length
+    ? Number(caisseCountRes[0].values[0][0])
+    : 0;
+
+  if (caisseCount === 0) {
+    const categoryNamesRes = db.exec("SELECT DISTINCT name FROM categories");
+    const categoryNames = categoryNamesRes.length
+      ? categoryNamesRes[0].values.map((row) => String(row[0]))
+      : [];
+
+    const namesToSeed = categoryNames.length > 0 ? categoryNames : DEFAULT_CAISSES;
+    for (const name of namesToSeed) {
+      db.run("INSERT OR IGNORE INTO caisses (name) VALUES (?)", [name]);
     }
+    dirty = true;
   }
 
-  if (!existing || settingsRow.length === 0 || count === 0) {
+  const unassignedRes = db.exec(
+    "SELECT COUNT(*) FROM transactions WHERE caisse_id IS NULL"
+  );
+  const unassignedCount = unassignedRes.length
+    ? Number(unassignedRes[0].values[0][0])
+    : 0;
+
+  if (unassignedCount > 0) {
+    const generalRes = db.exec("SELECT id FROM caisses WHERE name = 'Général'");
+    let generalId: number;
+    if (generalRes.length > 0) {
+      generalId = Number(generalRes[0].values[0][0]);
+    } else {
+      db.run("INSERT INTO caisses (name) VALUES ('Général')");
+      const idRes = db.exec("SELECT last_insert_rowid()");
+      generalId = Number(idRes[0].values[0][0]);
+    }
+
+    db.run(
+      `UPDATE transactions
+       SET caisse_id = COALESCE(
+         (
+           SELECT ca.id FROM categories cat
+           JOIN caisses ca ON ca.name = cat.name
+           WHERE cat.id = transactions.category_id
+         ),
+         ${generalId}
+       )
+       WHERE caisse_id IS NULL`
+    );
+    dirty = true;
+  }
+
+  if (dirty) {
     await persist(db);
   }
 

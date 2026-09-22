@@ -1,11 +1,16 @@
 export type TransactionType = "expense" | "income";
 export type LoanDirection = "lent" | "borrowed";
 
-export interface Category {
+export interface Caisse {
   id: number;
   name: string;
-  type: TransactionType;
   archived: number;
+}
+
+export interface CaisseWithBalance extends Caisse {
+  income: number;
+  expense: number;
+  balance: number;
 }
 
 export interface Contact {
@@ -19,13 +24,13 @@ export interface Transaction {
   type: TransactionType;
   amount: number;
   date: string;
-  category_id: number | null;
+  caisse_id: number;
   description: string | null;
   created_at: string;
 }
 
-export interface TransactionWithCategory extends Transaction {
-  category_name: string | null;
+export interface TransactionWithCaisse extends Transaction {
+  caisse_name: string | null;
 }
 
 export interface Loan {

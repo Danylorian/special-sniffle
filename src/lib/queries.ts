@@ -1,6 +1,7 @@
 import { db } from "./db";
 import type {
-  Category,
+  Caisse,
+  CaisseWithBalance,
   Contact,
   Loan,
   LoanDirection,
@@ -9,7 +10,7 @@ import type {
   Settings,
   Transaction,
   TransactionType,
-  TransactionWithCategory,
+  TransactionWithCaisse,
 } from "./types";
 
 // ---------- Settings ----------
@@ -24,30 +25,67 @@ export function updateSettings(currency: string, householdName: string) {
   ).run(currency, householdName);
 }
 
-// ---------- Categories ----------
+// ---------- Caisses ----------
 
-export function listCategories(type?: TransactionType): Category[] {
-  if (type) {
-    return db
-      .prepare(
-        "SELECT * FROM categories WHERE type = ? AND archived = 0 ORDER BY name"
-      )
-      .all(type) as Category[];
-  }
+export function listCaisses(): Caisse[] {
   return db
-    .prepare("SELECT * FROM categories WHERE archived = 0 ORDER BY type, name")
-    .all() as Category[];
+    .prepare("SELECT * FROM caisses WHERE archived = 0 ORDER BY name")
+    .all() as Caisse[];
 }
 
-export function createCategory(name: string, type: TransactionType) {
-  db.prepare("INSERT INTO categories (name, type) VALUES (?, ?)").run(
-    name,
-    type
-  );
+export function listCaissesWithBalance(): CaisseWithBalance[] {
+  const rows = db
+    .prepare(
+      `SELECT ca.*,
+        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'income'), 0) as income,
+        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense
+       FROM caisses ca
+       WHERE ca.archived = 0
+       ORDER BY ca.name`
+    )
+    .all() as (Caisse & { income: number; expense: number })[];
+
+  return rows.map((row) => ({
+    ...row,
+    balance: Math.round((row.income - row.expense) * 100) / 100,
+  }));
 }
 
-export function archiveCategory(id: number) {
-  db.prepare("UPDATE categories SET archived = 1 WHERE id = ?").run(id);
+export function getCaisse(id: number): Caisse | undefined {
+  return db.prepare("SELECT * FROM caisses WHERE id = ?").get(id) as
+    | Caisse
+    | undefined;
+}
+
+export function getCaisseWithBalance(id: number): CaisseWithBalance | undefined {
+  const row = db
+    .prepare(
+      `SELECT ca.*,
+        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'income'), 0) as income,
+        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense
+       FROM caisses ca
+       WHERE ca.id = ?`
+    )
+    .get(id) as (Caisse & { income: number; expense: number }) | undefined;
+  if (!row) return undefined;
+  return { ...row, balance: Math.round((row.income - row.expense) * 100) / 100 };
+}
+
+export function createCaisse(name: string) {
+  const existing = db
+    .prepare("SELECT id, archived FROM caisses WHERE name = ? COLLATE NOCASE")
+    .get(name) as { id: number; archived: number } | undefined;
+  if (existing) {
+    if (existing.archived) {
+      db.prepare("UPDATE caisses SET archived = 0 WHERE id = ?").run(existing.id);
+    }
+    return;
+  }
+  db.prepare("INSERT INTO caisses (name) VALUES (?)").run(name);
+}
+
+export function archiveCaisse(id: number) {
+  db.prepare("UPDATE caisses SET archived = 1 WHERE id = ?").run(id);
 }
 
 // ---------- Contacts ----------
@@ -69,18 +107,30 @@ export function findOrCreateContact(name: string, phone?: string): number {
 
 // ---------- Transactions ----------
 
-export function listTransactions(limit?: number): TransactionWithCategory[] {
+export function listTransactions(limit?: number): TransactionWithCaisse[] {
   const query = `
-    SELECT t.*, c.name as category_name
+    SELECT t.*, ca.name as caisse_name
     FROM transactions t
-    LEFT JOIN categories c ON c.id = t.category_id
+    LEFT JOIN caisses ca ON ca.id = t.caisse_id
     ORDER BY t.date DESC, t.id DESC
     ${limit ? "LIMIT ?" : ""}
   `;
   if (limit) {
-    return db.prepare(query).all(limit) as TransactionWithCategory[];
+    return db.prepare(query).all(limit) as TransactionWithCaisse[];
   }
-  return db.prepare(query).all() as TransactionWithCategory[];
+  return db.prepare(query).all() as TransactionWithCaisse[];
+}
+
+export function listTransactionsByCaisse(caisseId: number): TransactionWithCaisse[] {
+  return db
+    .prepare(
+      `SELECT t.*, ca.name as caisse_name
+       FROM transactions t
+       LEFT JOIN caisses ca ON ca.id = t.caisse_id
+       WHERE t.caisse_id = ?
+       ORDER BY t.date DESC, t.id DESC`
+    )
+    .all(caisseId) as TransactionWithCaisse[];
 }
 
 export function getTransaction(id: number): Transaction | undefined {
@@ -93,17 +143,17 @@ export function createTransaction(input: {
   type: TransactionType;
   amount: number;
   date: string;
-  categoryId: number | null;
+  caisseId: number;
   description: string | null;
 }) {
   db.prepare(
-    `INSERT INTO transactions (type, amount, date, category_id, description)
+    `INSERT INTO transactions (type, amount, date, caisse_id, description)
      VALUES (?, ?, ?, ?, ?)`
   ).run(
     input.type,
     input.amount,
     input.date,
-    input.categoryId,
+    input.caisseId,
     input.description
   );
 }
@@ -114,19 +164,19 @@ export function updateTransaction(
     type: TransactionType;
     amount: number;
     date: string;
-    categoryId: number | null;
+    caisseId: number;
     description: string | null;
   }
 ) {
   db.prepare(
     `UPDATE transactions
-     SET type = ?, amount = ?, date = ?, category_id = ?, description = ?
+     SET type = ?, amount = ?, date = ?, caisse_id = ?, description = ?
      WHERE id = ?`
   ).run(
     input.type,
     input.amount,
     input.date,
-    input.categoryId,
+    input.caisseId,
     input.description,
     id
   );
@@ -216,8 +266,9 @@ export interface DashboardData {
   monthExpense: number;
   totalOwedToUs: number; // argent prêté non remboursé
   totalWeOwe: number; // emprunts non remboursés
-  recentTransactions: TransactionWithCategory[];
+  recentTransactions: TransactionWithCaisse[];
   activeLoans: LoanWithDetails[];
+  caisses: CaisseWithBalance[];
 }
 
 export function getDashboardData(): DashboardData {
@@ -287,5 +338,6 @@ export function getDashboardData(): DashboardData {
     totalWeOwe: Math.round(totalWeOwe * 100) / 100,
     recentTransactions: listTransactions(8),
     activeLoans: activeLoans.slice(0, 6),
+    caisses: listCaissesWithBalance(),
   };
 }

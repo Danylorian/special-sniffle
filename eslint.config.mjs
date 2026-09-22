@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The mobile/ app is a separate Vite project with its own linter (oxlint).
+    "mobile/**",
   ]),
 ]);
 

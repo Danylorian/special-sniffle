@@ -1,31 +1,30 @@
 import { useState, type FormEvent } from "react";
-import type { Category, TransactionType } from "../lib/types";
+import type { Caisse, TransactionType } from "../lib/types";
 
 interface Props {
-  expenseCategories: Category[];
-  incomeCategories: Category[];
+  caisses: Caisse[];
   defaultType: TransactionType;
+  defaultCaisseId?: number | null;
   onSubmit: (formData: FormData) => void | Promise<void>;
   initialValues?: {
     amount: number;
     date: string;
-    categoryId: number | null;
+    caisseId: number;
     description: string | null;
   };
   submitLabel: string;
 }
 
 export default function TransactionForm({
-  expenseCategories,
-  incomeCategories,
+  caisses,
   defaultType,
+  defaultCaisseId,
   onSubmit,
   initialValues,
   submitLabel,
 }: Props) {
   const [type, setType] = useState<TransactionType>(defaultType);
   const [submitting, setSubmitting] = useState(false);
-  const categories = type === "expense" ? expenseCategories : incomeCategories;
   const today = new Date().toISOString().slice(0, 10);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -83,14 +82,17 @@ export default function TransactionForm({
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Catégorie</span>
+        <span className="text-sm font-medium">Caisse</span>
         <select
-          name="categoryId"
-          defaultValue={initialValues?.categoryId ?? ""}
+          name="caisseId"
+          required
+          defaultValue={initialValues?.caisseId ?? defaultCaisseId ?? ""}
           className="rounded-xl border border-black/10 dark:border-white/10 bg-transparent px-3 py-3"
         >
-          <option value="">— Sans catégorie —</option>
-          {categories.map((c) => (
+          <option value="" disabled>
+            — Choisir une caisse —
+          </option>
+          {caisses.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
