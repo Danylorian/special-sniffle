@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from "react";
-import { updateSettings } from "../lib/queries";
+import { updateSettings, updateTheme } from "../lib/queries";
 import { useSettings } from "../lib/SettingsContext";
+import type { ThemePreference } from "../lib/types";
+
+const THEME_OPTIONS: { value: ThemePreference; label: string; icon: string }[] = [
+  { value: "system", label: "Système", icon: "🌓" },
+  { value: "light", label: "Clair", icon: "☀️" },
+  { value: "dark", label: "Sombre", icon: "🌙" },
+];
 
 export default function SettingsPage() {
   const { settings, reload } = useSettings();
@@ -17,6 +24,11 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  async function handleThemeChange(theme: ThemePreference) {
+    await updateTheme(theme);
+    await reload();
+  }
+
   if (!settings) {
     return <p className="text-sm text-neutral-500 text-center py-10">Chargement…</p>;
   }
@@ -24,6 +36,27 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Réglages</h1>
+
+      <section className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+        <h2 className="font-semibold mb-3">Apparence</h2>
+        <div className="grid grid-cols-3 gap-2">
+          {THEME_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleThemeChange(opt.value)}
+              className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ${
+                settings.theme === opt.value
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                  : "border-black/10 dark:border-white/10 text-neutral-500"
+              }`}
+            >
+              <span className="text-xl">{opt.icon}</span>
+              <span className="text-xs font-medium">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <form
         onSubmit={handleSubmit}

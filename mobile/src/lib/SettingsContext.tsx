@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { getSettings } from "./queries";
+import { applyTheme } from "./theme";
 import type { Settings } from "./types";
 
 interface SettingsContextValue {
@@ -27,6 +28,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!settings) return;
+    applyTheme(settings.theme);
+
+    if (settings.theme !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => applyTheme("system");
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, [settings]);
 
   return (
     <SettingsContext.Provider value={{ settings, reload }}>

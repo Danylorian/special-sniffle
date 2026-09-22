@@ -79,7 +79,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     currency TEXT NOT NULL DEFAULT 'FCFA',
-    household_name TEXT NOT NULL DEFAULT 'Ma caisse'
+    household_name TEXT NOT NULL DEFAULT 'Ma caisse',
+    theme TEXT NOT NULL DEFAULT 'system'
   );
 
   CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
@@ -93,6 +94,13 @@ const transactionColumns = db
   .all() as { name: string }[];
 if (!transactionColumns.some((c) => c.name === "caisse_id")) {
   db.exec("ALTER TABLE transactions ADD COLUMN caisse_id INTEGER REFERENCES caisses(id)");
+}
+
+const settingsColumns = db
+  .prepare("PRAGMA table_info(settings)")
+  .all() as { name: string }[];
+if (!settingsColumns.some((c) => c.name === "theme")) {
+  db.exec("ALTER TABLE settings ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
 }
 
 const settingsRow = db.prepare("SELECT id FROM settings WHERE id = 1").get();

@@ -8,6 +8,7 @@ import type {
   LoanRepayment,
   LoanWithDetails,
   Settings,
+  ThemePreference,
   Transaction,
   TransactionType,
   TransactionWithCaisse,
@@ -54,6 +55,11 @@ export async function updateSettings(currency: string, householdName: string) {
     "UPDATE settings SET currency = ?, household_name = ? WHERE id = 1",
     [currency, householdName]
   );
+}
+
+export async function updateTheme(theme: ThemePreference) {
+  const db = await getDb();
+  await run(db, "UPDATE settings SET theme = ? WHERE id = 1", [theme]);
 }
 
 // ---------- Caisses ----------

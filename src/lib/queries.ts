@@ -8,6 +8,7 @@ import type {
   LoanRepayment,
   LoanWithDetails,
   Settings,
+  ThemePreference,
   Transaction,
   TransactionType,
   TransactionWithCaisse,
@@ -23,6 +24,10 @@ export function updateSettings(currency: string, householdName: string) {
   db.prepare(
     "UPDATE settings SET currency = ?, household_name = ? WHERE id = 1"
   ).run(currency, householdName);
+}
+
+export function updateTheme(theme: ThemePreference) {
+  db.prepare("UPDATE settings SET theme = ? WHERE id = 1").run(theme);
 }
 
 // ---------- Caisses ----------

@@ -102,7 +102,8 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     currency TEXT NOT NULL DEFAULT 'FCFA',
-    household_name TEXT NOT NULL DEFAULT 'Ma caisse'
+    household_name TEXT NOT NULL DEFAULT 'Ma caisse',
+    theme TEXT NOT NULL DEFAULT 'system'
   );
 `;
 
@@ -123,6 +124,11 @@ async function initializeDb(SQL: SqlJsStatic, existing?: Uint8Array) {
 
   if (!columnExists(db, "transactions", "caisse_id")) {
     db.run("ALTER TABLE transactions ADD COLUMN caisse_id INTEGER REFERENCES caisses(id)");
+    dirty = true;
+  }
+
+  if (!columnExists(db, "settings", "theme")) {
+    db.run("ALTER TABLE settings ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
     dirty = true;
   }
 

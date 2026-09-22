@@ -1,5 +1,6 @@
 import { getSettings } from "@/lib/queries";
 import { updateSettingsAction } from "@/app/actions";
+import ThemePicker from "@/components/ThemePicker";
 
 export default function SettingsPage() {
   const settings = getSettings();
@@ -7,6 +8,11 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Réglages</h1>
+
+      <section className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+        <h2 className="font-semibold mb-3">Apparence</h2>
+        <ThemePicker current={settings.theme} />
+      </section>
 
       <form
         action={updateSettingsAction}

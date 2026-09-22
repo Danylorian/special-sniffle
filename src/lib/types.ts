@@ -1,5 +1,6 @@
 export type TransactionType = "expense" | "income";
 export type LoanDirection = "lent" | "borrowed";
+export type ThemePreference = "light" | "dark" | "system";
 
 export interface Caisse {
   id: number;
@@ -62,4 +63,5 @@ export interface Settings {
   id: number;
   currency: string;
   household_name: string;
+  theme: ThemePreference;
 }

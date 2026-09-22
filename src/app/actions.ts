@@ -11,9 +11,10 @@ import {
   deleteLoan,
   deleteTransaction,
   updateSettings,
+  updateTheme,
   updateTransaction,
 } from "@/lib/queries";
-import type { LoanDirection, TransactionType } from "@/lib/types";
+import type { LoanDirection, ThemePreference, TransactionType } from "@/lib/types";
 
 function parseAmount(raw: FormDataEntryValue | null): number {
   const value = Number(String(raw ?? "").replace(",", "."));
@@ -151,5 +152,11 @@ export async function updateSettingsAction(formData: FormData) {
   const currency = str(formData.get("currency")) ?? "FCFA";
   const householdName = str(formData.get("householdName")) ?? "Ma caisse";
   updateSettings(currency, householdName);
+  revalidatePath("/", "layout");
+}
+
+export async function updateThemeAction(formData: FormData) {
+  const theme = String(formData.get("theme")) as ThemePreference;
+  updateTheme(theme);
   revalidatePath("/", "layout");
 }

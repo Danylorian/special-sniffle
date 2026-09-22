@@ -25,12 +25,24 @@ export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   const settings = getSettings();
+  const dataTheme = settings.theme === "system" ? undefined : settings.theme;
 
   return (
     <html
       lang="fr"
+      data-theme={dataTheme}
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {settings.theme === "system" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `if (window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.setAttribute('data-theme','dark');`,
+            }}
+          />
+        )}
+      </head>
       <body className="min-h-full flex flex-col bg-neutral-50 dark:bg-neutral-950">
         <header className="sticky top-0 z-10 border-b border-black/10 bg-white/95 backdrop-blur px-4 py-3 dark:bg-black/90 dark:border-white/10">
           <h1 className="text-lg font-semibold">

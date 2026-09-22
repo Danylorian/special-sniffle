@@ -1,9 +1,11 @@
 import { Outlet } from "react-router-dom";
 import BottomNav from "./BottomNav";
 import { useSettings } from "../lib/SettingsContext";
+import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 export default function Layout() {
   const { settings } = useSettings();
+  useAndroidBackButton();
 
   return (
     <div className="min-h-full flex flex-col bg-neutral-50 dark:bg-neutral-950">
