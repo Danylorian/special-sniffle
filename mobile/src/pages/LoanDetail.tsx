@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   addRepayment,
   deleteLoan,
@@ -82,6 +82,10 @@ export default function LoanDetail() {
             : "Argent emprunté à cette personne"}
           {" · "}
           {formatDate(loan.date)}
+          {" · "}
+          <Link to={`/caisses/${loan.caisse_id}`} className="underline">
+            {loan.caisse_name}
+          </Link>
         </p>
         {loan.description && (
           <p className="text-sm text-neutral-500 mt-1">{loan.description}</p>

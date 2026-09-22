@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getLoan, getSettings, listRepayments } from "@/lib/queries";
 import { formatAmount, formatDate, todayIso } from "@/lib/money";
 import { addRepaymentAction, deleteLoanAction } from "@/app/actions";
@@ -25,6 +26,10 @@ export default async function LoanDetailPage({
             : "Argent emprunté à cette personne"}
           {" · "}
           {formatDate(loan.date)}
+          {" · "}
+          <Link href={`/caisses/${loan.caisse_id}`} className="underline">
+            {loan.caisse_name}
+          </Link>
         </p>
         {loan.description && (
           <p className="text-sm text-neutral-500 mt-1">{loan.description}</p>

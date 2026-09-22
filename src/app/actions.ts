@@ -94,14 +94,27 @@ export async function createLoanAction(formData: FormData) {
     throw new Error("Le nom de la personne est obligatoire.");
   }
   const contactPhone = str(formData.get("contactPhone")) ?? undefined;
+  const caisseId = Number(formData.get("caisseId"));
+  if (!caisseId) {
+    throw new Error("La caisse est obligatoire.");
+  }
   const amount = parseAmount(formData.get("amount"));
   const date = str(formData.get("date")) ?? new Date().toISOString().slice(0, 10);
   const description = str(formData.get("description"));
 
-  createLoan({ direction, contactName, contactPhone, amount, date, description });
+  createLoan({
+    direction,
+    contactName,
+    contactPhone,
+    caisseId,
+    amount,
+    date,
+    description,
+  });
 
   revalidatePath("/");
   revalidatePath("/prets");
+  revalidatePath("/caisses");
   redirect("/prets");
 }
 
@@ -116,6 +129,7 @@ export async function addRepaymentAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/prets");
   revalidatePath(`/prets/${loanId}`);
+  revalidatePath("/caisses");
   redirect(`/prets/${loanId}`);
 }
 
@@ -124,6 +138,7 @@ export async function deleteLoanAction(formData: FormData) {
   deleteLoan(id);
   revalidatePath("/");
   revalidatePath("/prets");
+  revalidatePath("/caisses");
   redirect("/prets");
 }
 

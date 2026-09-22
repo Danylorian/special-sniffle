@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getCaisseWithBalance, listTransactionsByCaisse } from "../lib/queries";
+import {
+  getCaisseWithBalance,
+  listLoansByCaisse,
+  listTransactionsByCaisse,
+} from "../lib/queries";
 import { useSettings } from "../lib/SettingsContext";
 import { formatAmount, formatDate } from "../lib/money";
 import DeleteTransactionButton from "../components/DeleteTransactionButton";
-import type { CaisseWithBalance, TransactionWithCaisse } from "../lib/types";
+import type {
+  CaisseWithBalance,
+  LoanWithDetails,
+  TransactionWithCaisse,
+} from "../lib/types";
 
 export default function CaisseDetail() {
   const { id } = useParams();
@@ -13,6 +21,7 @@ export default function CaisseDetail() {
 
   const [caisse, setCaisse] = useState<CaisseWithBalance | null>(null);
   const [transactions, setTransactions] = useState<TransactionWithCaisse[]>([]);
+  const [loans, setLoans] = useState<LoanWithDetails[]>([]);
   const [notFound, setNotFound] = useState(false);
 
   async function reload() {
@@ -23,6 +32,7 @@ export default function CaisseDetail() {
     }
     setCaisse(c);
     setTransactions(await listTransactionsByCaisse(caisseId));
+    setLoans(await listLoansByCaisse(caisseId));
   }
 
   useEffect(() => {
@@ -61,6 +71,33 @@ export default function CaisseDetail() {
             </p>
           </div>
         </div>
+        {(caisse.lent > 0 || caisse.borrowed > 0) && (
+          <div className="grid grid-cols-2 gap-3 text-sm mt-3 pt-3 border-t border-black/10 dark:border-white/10">
+            <div>
+              <p className="text-neutral-500">Prêté depuis cette caisse</p>
+              <p className="font-semibold text-base">
+                {formatAmount(caisse.lent - caisse.repaidToUs, settings.currency)}
+                <span className="text-xs text-neutral-400 font-normal">
+                  {" "}
+                  restant
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-neutral-500">Emprunté vers cette caisse</p>
+              <p className="font-semibold text-base">
+                {formatAmount(
+                  caisse.borrowed - caisse.repaidByUs,
+                  settings.currency
+                )}
+                <span className="text-xs text-neutral-400 font-normal">
+                  {" "}
+                  restant
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
         <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10">
           <p className="text-neutral-500 text-sm">Solde de cette caisse</p>
           <p
@@ -73,7 +110,7 @@ export default function CaisseDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <Link
           to={`/transactions/nouvelle?type=expense&caisse=${caisse.id}`}
           className="flex flex-col items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-2 py-3 text-center text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
@@ -92,7 +129,60 @@ export default function CaisseDetail() {
             Nouvelle recette
           </span>
         </Link>
+        <Link
+          to={`/prets/nouveau?caisse=${caisse.id}`}
+          className="flex flex-col items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-2 py-3 text-center text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
+        >
+          <span className="text-xl">🤝</span>
+          <span className="text-xs font-medium leading-tight">
+            Prêt / Emprunt
+          </span>
+        </Link>
       </div>
+
+      {loans.length > 0 && (
+        <div>
+          <h2 className="font-semibold mb-2">Prêts liés à cette caisse</h2>
+          <ul className="flex flex-col gap-2">
+            {loans.map((loan) => {
+              const settled = loan.remaining <= 0.001;
+              return (
+                <li key={loan.id}>
+                  <Link
+                    to={`/prets/${loan.id}`}
+                    className={`flex items-center justify-between rounded-xl border px-3 py-2 ${
+                      settled
+                        ? "border-black/5 opacity-60 dark:border-white/5"
+                        : "border-black/10 dark:border-white/10"
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium">{loan.contact_name}</p>
+                      <p className="text-xs text-neutral-500">
+                        {loan.direction === "lent" ? "Prêté" : "Emprunté"} ·{" "}
+                        {formatDate(loan.date)}
+                      </p>
+                    </div>
+                    <p
+                      className={`font-semibold ${
+                        settled
+                          ? "text-neutral-400"
+                          : loan.direction === "lent"
+                          ? "text-emerald-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {settled
+                        ? "Soldé"
+                        : formatAmount(loan.remaining, settings.currency)}
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       <div>
         <h2 className="font-semibold mb-2">Opérations de cette caisse</h2>

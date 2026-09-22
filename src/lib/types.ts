@@ -11,6 +11,10 @@ export interface Caisse {
 export interface CaisseWithBalance extends Caisse {
   income: number;
   expense: number;
+  lent: number;
+  borrowed: number;
+  repaidToUs: number;
+  repaidByUs: number;
   balance: number;
 }
 
@@ -38,6 +42,7 @@ export interface Loan {
   id: number;
   direction: LoanDirection;
   contact_id: number;
+  caisse_id: number;
   amount: number;
   date: string;
   description: string | null;
@@ -55,6 +60,7 @@ export interface LoanRepayment {
 
 export interface LoanWithDetails extends Loan {
   contact_name: string;
+  caisse_name: string;
   repaid: number;
   remaining: number;
 }

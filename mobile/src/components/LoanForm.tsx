@@ -1,14 +1,18 @@
 import { useState, type FormEvent } from "react";
-import type { LoanDirection } from "../lib/types";
+import type { Caisse, LoanDirection } from "../lib/types";
 
 interface Props {
   onSubmit: (formData: FormData) => void | Promise<void>;
+  caisses: Caisse[];
   defaultDirection?: LoanDirection;
+  defaultCaisseId?: number | null;
 }
 
 export default function LoanForm({
   onSubmit,
+  caisses,
   defaultDirection = "lent",
+  defaultCaisseId,
 }: Props) {
   const [direction, setDirection] = useState<LoanDirection>(defaultDirection);
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +55,29 @@ export default function LoanForm({
         </button>
       </div>
       <input type="hidden" name="direction" value={direction} />
+
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium">
+          {direction === "lent"
+            ? "Depuis quelle caisse ?"
+            : "Vers quelle caisse ?"}
+        </span>
+        <select
+          name="caisseId"
+          required
+          defaultValue={defaultCaisseId ?? ""}
+          className="rounded-xl border border-black/10 dark:border-white/10 bg-transparent px-3 py-3"
+        >
+          <option value="" disabled>
+            — Choisir une caisse —
+          </option>
+          {caisses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium">

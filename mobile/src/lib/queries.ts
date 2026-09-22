@@ -64,19 +64,29 @@ export async function updateTheme(theme: ThemePreference) {
 
 // ---------- Caisses ----------
 
-function withBalance(
-  row: Caisse & { income: number; expense: number }
-): CaisseWithBalance {
-  return {
-    ...row,
-    balance: Math.round((row.income - row.expense) * 100) / 100,
-  };
+type CaisseRawRow = Caisse & {
+  income: number;
+  expense: number;
+  lent: number;
+  borrowed: number;
+  repaidToUs: number;
+  repaidByUs: number;
+};
+
+function withBalance(row: CaisseRawRow): CaisseWithBalance {
+  const balance =
+    row.income - row.expense - row.lent + row.repaidToUs + row.borrowed - row.repaidByUs;
+  return { ...row, balance: Math.round(balance * 100) / 100 };
 }
 
 const CAISSE_BALANCE_SELECT = `
   SELECT ca.*,
     COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'income'), 0) as income,
-    COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense
+    COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense,
+    COALESCE((SELECT SUM(amount) FROM loans l WHERE l.caisse_id = ca.id AND l.direction = 'lent'), 0) as lent,
+    COALESCE((SELECT SUM(amount) FROM loans l WHERE l.caisse_id = ca.id AND l.direction = 'borrowed'), 0) as borrowed,
+    COALESCE((SELECT SUM(r.amount) FROM loan_repayments r JOIN loans l ON l.id = r.loan_id WHERE l.caisse_id = ca.id AND l.direction = 'lent'), 0) as repaidToUs,
+    COALESCE((SELECT SUM(r.amount) FROM loan_repayments r JOIN loans l ON l.id = r.loan_id WHERE l.caisse_id = ca.id AND l.direction = 'borrowed'), 0) as repaidByUs
   FROM caisses ca
 `;
 
@@ -90,7 +100,7 @@ export async function listCaisses(): Promise<Caisse[]> {
 
 export async function listCaissesWithBalance(): Promise<CaisseWithBalance[]> {
   const db = await getDb();
-  const rows = queryAll<Caisse & { income: number; expense: number }>(
+  const rows = queryAll<CaisseRawRow>(
     db,
     `${CAISSE_BALANCE_SELECT} WHERE ca.archived = 0 ORDER BY ca.name`
   );
@@ -101,7 +111,7 @@ export async function getCaisseWithBalance(
   id: number
 ): Promise<CaisseWithBalance | undefined> {
   const db = await getDb();
-  const row = queryOne<Caisse & { income: number; expense: number }>(
+  const row = queryOne<CaisseRawRow>(
     db,
     `${CAISSE_BALANCE_SELECT} WHERE ca.id = ?`,
     [id]
@@ -234,39 +244,51 @@ export async function deleteTransaction(id: number) {
 
 // ---------- Loans ----------
 
-function withRemaining(
-  row: Loan & { contact_name: string; repaid: number }
-): LoanWithDetails {
+type LoanRawRow = Loan & {
+  contact_name: string;
+  caisse_name: string;
+  repaid: number;
+};
+
+function withRemaining(row: LoanRawRow): LoanWithDetails {
   return {
     ...row,
     remaining: Math.round((row.amount - row.repaid) * 100) / 100,
   };
 }
 
+const LOAN_SELECT = `
+  SELECT l.*, c.name as contact_name, ca.name as caisse_name,
+          COALESCE((SELECT SUM(amount) FROM loan_repayments r WHERE r.loan_id = l.id), 0) as repaid
+   FROM loans l
+   JOIN contacts c ON c.id = l.contact_id
+   JOIN caisses ca ON ca.id = l.caisse_id
+`;
+
 export async function listLoans(): Promise<LoanWithDetails[]> {
   const db = await getDb();
-  const rows = queryAll<Loan & { contact_name: string; repaid: number }>(
+  const rows = queryAll<LoanRawRow>(
     db,
-    `SELECT l.*, c.name as contact_name,
-            COALESCE((SELECT SUM(amount) FROM loan_repayments r WHERE r.loan_id = l.id), 0) as repaid
-     FROM loans l
-     JOIN contacts c ON c.id = l.contact_id
-     ORDER BY l.date DESC, l.id DESC`
+    `${LOAN_SELECT} ORDER BY l.date DESC, l.id DESC`
+  );
+  return rows.map(withRemaining);
+}
+
+export async function listLoansByCaisse(
+  caisseId: number
+): Promise<LoanWithDetails[]> {
+  const db = await getDb();
+  const rows = queryAll<LoanRawRow>(
+    db,
+    `${LOAN_SELECT} WHERE l.caisse_id = ? ORDER BY l.date DESC, l.id DESC`,
+    [caisseId]
   );
   return rows.map(withRemaining);
 }
 
 export async function getLoan(id: number): Promise<LoanWithDetails | undefined> {
   const db = await getDb();
-  const row = queryOne<Loan & { contact_name: string; repaid: number }>(
-    db,
-    `SELECT l.*, c.name as contact_name,
-            COALESCE((SELECT SUM(amount) FROM loan_repayments r WHERE r.loan_id = l.id), 0) as repaid
-     FROM loans l
-     JOIN contacts c ON c.id = l.contact_id
-     WHERE l.id = ?`,
-    [id]
-  );
+  const row = queryOne<LoanRawRow>(db, `${LOAN_SELECT} WHERE l.id = ?`, [id]);
   return row ? withRemaining(row) : undefined;
 }
 
@@ -283,6 +305,7 @@ export interface LoanInput {
   direction: LoanDirection;
   contactName: string;
   contactPhone?: string;
+  caisseId: number;
   amount: number;
   date: string;
   description: string | null;
@@ -297,9 +320,16 @@ export async function createLoan(input: LoanInput) {
   );
   await run(
     db,
-    `INSERT INTO loans (direction, contact_id, amount, date, description)
-     VALUES (?, ?, ?, ?, ?)`,
-    [input.direction, contactId, input.amount, input.date, input.description]
+    `INSERT INTO loans (direction, contact_id, caisse_id, amount, date, description)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      input.direction,
+      contactId,
+      input.caisseId,
+      input.amount,
+      input.date,
+      input.description,
+    ]
   );
 }
 

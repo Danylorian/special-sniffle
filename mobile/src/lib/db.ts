@@ -84,6 +84,7 @@ const SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     direction TEXT NOT NULL CHECK (direction IN ('lent','borrowed')),
     contact_id INTEGER NOT NULL REFERENCES contacts(id),
+    caisse_id INTEGER REFERENCES caisses(id),
     amount REAL NOT NULL CHECK (amount > 0),
     date TEXT NOT NULL,
     description TEXT,
@@ -127,6 +128,11 @@ async function initializeDb(SQL: SqlJsStatic, existing?: Uint8Array) {
     dirty = true;
   }
 
+  if (!columnExists(db, "loans", "caisse_id")) {
+    db.run("ALTER TABLE loans ADD COLUMN caisse_id INTEGER REFERENCES caisses(id)");
+    dirty = true;
+  }
+
   if (!columnExists(db, "settings", "theme")) {
     db.run("ALTER TABLE settings ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
     dirty = true;
@@ -158,6 +164,14 @@ async function initializeDb(SQL: SqlJsStatic, existing?: Uint8Array) {
     dirty = true;
   }
 
+  function getOrCreateGeneralCaisseId(): number {
+    const generalRes = db.exec("SELECT id FROM caisses WHERE name = 'Général'");
+    if (generalRes.length > 0) return Number(generalRes[0].values[0][0]);
+    db.run("INSERT INTO caisses (name) VALUES ('Général')");
+    const idRes = db.exec("SELECT last_insert_rowid()");
+    return Number(idRes[0].values[0][0]);
+  }
+
   const unassignedRes = db.exec(
     "SELECT COUNT(*) FROM transactions WHERE caisse_id IS NULL"
   );
@@ -166,15 +180,7 @@ async function initializeDb(SQL: SqlJsStatic, existing?: Uint8Array) {
     : 0;
 
   if (unassignedCount > 0) {
-    const generalRes = db.exec("SELECT id FROM caisses WHERE name = 'Général'");
-    let generalId: number;
-    if (generalRes.length > 0) {
-      generalId = Number(generalRes[0].values[0][0]);
-    } else {
-      db.run("INSERT INTO caisses (name) VALUES ('Général')");
-      const idRes = db.exec("SELECT last_insert_rowid()");
-      generalId = Number(idRes[0].values[0][0]);
-    }
+    const generalId = getOrCreateGeneralCaisseId();
 
     db.run(
       `UPDATE transactions
@@ -188,6 +194,19 @@ async function initializeDb(SQL: SqlJsStatic, existing?: Uint8Array) {
        )
        WHERE caisse_id IS NULL`
     );
+    dirty = true;
+  }
+
+  const unassignedLoansRes = db.exec(
+    "SELECT COUNT(*) FROM loans WHERE caisse_id IS NULL"
+  );
+  const unassignedLoansCount = unassignedLoansRes.length
+    ? Number(unassignedLoansRes[0].values[0][0])
+    : 0;
+
+  if (unassignedLoansCount > 0) {
+    const generalId = getOrCreateGeneralCaisseId();
+    db.run("UPDATE loans SET caisse_id = ? WHERE caisse_id IS NULL", [generalId]);
     dirty = true;
   }
 

@@ -96,6 +96,13 @@ if (!transactionColumns.some((c) => c.name === "caisse_id")) {
   db.exec("ALTER TABLE transactions ADD COLUMN caisse_id INTEGER REFERENCES caisses(id)");
 }
 
+const loanColumns = db.prepare("PRAGMA table_info(loans)").all() as {
+  name: string;
+}[];
+if (!loanColumns.some((c) => c.name === "caisse_id")) {
+  db.exec("ALTER TABLE loans ADD COLUMN caisse_id INTEGER REFERENCES caisses(id)");
+}
+
 const settingsColumns = db
   .prepare("PRAGMA table_info(settings)")
   .all() as { name: string }[];
@@ -137,23 +144,25 @@ if (caisseCount.count === 0) {
   }
 }
 
+function getOrCreateGeneralCaisseId(): number {
+  const existing = db
+    .prepare("SELECT id FROM caisses WHERE name = 'Général'")
+    .get() as { id: number } | undefined;
+  if (existing) return existing.id;
+  const result = db
+    .prepare("INSERT INTO caisses (name) VALUES ('Général')")
+    .run();
+  return Number(result.lastInsertRowid);
+}
+
 // Backfill caisse_id for transactions that predate the caisses feature,
 // matching by the old category's name, falling back to "Général".
-const unassignedCount = db
+const unassignedTransactions = db
   .prepare("SELECT COUNT(*) as count FROM transactions WHERE caisse_id IS NULL")
   .get() as { count: number };
 
-if (unassignedCount.count > 0) {
-  const generalId = (() => {
-    const existing = db
-      .prepare("SELECT id FROM caisses WHERE name = 'Général'")
-      .get() as { id: number } | undefined;
-    if (existing) return existing.id;
-    const result = db
-      .prepare("INSERT INTO caisses (name) VALUES ('Général')")
-      .run();
-    return Number(result.lastInsertRowid);
-  })();
+if (unassignedTransactions.count > 0) {
+  const generalId = getOrCreateGeneralCaisseId();
 
   db.exec(`
     UPDATE transactions
@@ -167,4 +176,16 @@ if (unassignedCount.count > 0) {
     )
     WHERE caisse_id IS NULL
   `);
+}
+
+// Backfill caisse_id for loans that predate this feature.
+const unassignedLoans = db
+  .prepare("SELECT COUNT(*) as count FROM loans WHERE caisse_id IS NULL")
+  .get() as { count: number };
+
+if (unassignedLoans.count > 0) {
+  const generalId = getOrCreateGeneralCaisseId();
+  db.prepare("UPDATE loans SET caisse_id = ? WHERE caisse_id IS NULL").run(
+    generalId
+  );
 }

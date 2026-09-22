@@ -34,7 +34,7 @@ function LoanGroup({
                 <div>
                   <p className="font-medium">{loan.contact_name}</p>
                   <p className="text-xs text-neutral-500">
-                    {formatDate(loan.date)}
+                    {formatDate(loan.date)} · {loan.caisse_name}
                     {loan.description ? ` · ${loan.description}` : ""}
                   </p>
                 </div>

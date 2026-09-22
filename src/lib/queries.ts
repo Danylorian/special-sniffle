@@ -38,22 +38,37 @@ export function listCaisses(): Caisse[] {
     .all() as Caisse[];
 }
 
+const CAISSE_BALANCE_SELECT = `
+  SELECT ca.*,
+    COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'income'), 0) as income,
+    COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense,
+    COALESCE((SELECT SUM(amount) FROM loans l WHERE l.caisse_id = ca.id AND l.direction = 'lent'), 0) as lent,
+    COALESCE((SELECT SUM(amount) FROM loans l WHERE l.caisse_id = ca.id AND l.direction = 'borrowed'), 0) as borrowed,
+    COALESCE((SELECT SUM(r.amount) FROM loan_repayments r JOIN loans l ON l.id = r.loan_id WHERE l.caisse_id = ca.id AND l.direction = 'lent'), 0) as repaidToUs,
+    COALESCE((SELECT SUM(r.amount) FROM loan_repayments r JOIN loans l ON l.id = r.loan_id WHERE l.caisse_id = ca.id AND l.direction = 'borrowed'), 0) as repaidByUs
+  FROM caisses ca
+`;
+
+type CaisseRawRow = Caisse & {
+  income: number;
+  expense: number;
+  lent: number;
+  borrowed: number;
+  repaidToUs: number;
+  repaidByUs: number;
+};
+
+function withCaisseBalance(row: CaisseRawRow): CaisseWithBalance {
+  const balance =
+    row.income - row.expense - row.lent + row.repaidToUs + row.borrowed - row.repaidByUs;
+  return { ...row, balance: Math.round(balance * 100) / 100 };
+}
+
 export function listCaissesWithBalance(): CaisseWithBalance[] {
   const rows = db
-    .prepare(
-      `SELECT ca.*,
-        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'income'), 0) as income,
-        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense
-       FROM caisses ca
-       WHERE ca.archived = 0
-       ORDER BY ca.name`
-    )
-    .all() as (Caisse & { income: number; expense: number })[];
-
-  return rows.map((row) => ({
-    ...row,
-    balance: Math.round((row.income - row.expense) * 100) / 100,
-  }));
+    .prepare(`${CAISSE_BALANCE_SELECT} WHERE ca.archived = 0 ORDER BY ca.name`)
+    .all() as CaisseRawRow[];
+  return rows.map(withCaisseBalance);
 }
 
 export function getCaisse(id: number): Caisse | undefined {
@@ -64,16 +79,10 @@ export function getCaisse(id: number): Caisse | undefined {
 
 export function getCaisseWithBalance(id: number): CaisseWithBalance | undefined {
   const row = db
-    .prepare(
-      `SELECT ca.*,
-        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'income'), 0) as income,
-        COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.caisse_id = ca.id AND t.type = 'expense'), 0) as expense
-       FROM caisses ca
-       WHERE ca.id = ?`
-    )
-    .get(id) as (Caisse & { income: number; expense: number }) | undefined;
+    .prepare(`${CAISSE_BALANCE_SELECT} WHERE ca.id = ?`)
+    .get(id) as CaisseRawRow | undefined;
   if (!row) return undefined;
-  return { ...row, balance: Math.round((row.income - row.expense) * 100) / 100 };
+  return withCaisseBalance(row);
 }
 
 export function createCaisse(name: string) {
@@ -193,35 +202,47 @@ export function deleteTransaction(id: number) {
 
 // ---------- Loans ----------
 
-export function listLoans(): LoanWithDetails[] {
-  const rows = db
-    .prepare(
-      `SELECT l.*, c.name as contact_name,
-              COALESCE((SELECT SUM(amount) FROM loan_repayments r WHERE r.loan_id = l.id), 0) as repaid
-       FROM loans l
-       JOIN contacts c ON c.id = l.contact_id
-       ORDER BY l.date DESC, l.id DESC`
-    )
-    .all() as (Loan & { contact_name: string; repaid: number })[];
+const LOAN_SELECT = `
+  SELECT l.*, c.name as contact_name, ca.name as caisse_name,
+          COALESCE((SELECT SUM(amount) FROM loan_repayments r WHERE r.loan_id = l.id), 0) as repaid
+   FROM loans l
+   JOIN contacts c ON c.id = l.contact_id
+   JOIN caisses ca ON ca.id = l.caisse_id
+`;
 
-  return rows.map((row) => ({
+type LoanRawRow = Loan & {
+  contact_name: string;
+  caisse_name: string;
+  repaid: number;
+};
+
+function withLoanRemaining(row: LoanRawRow): LoanWithDetails {
+  return {
     ...row,
     remaining: Math.round((row.amount - row.repaid) * 100) / 100,
-  }));
+  };
+}
+
+export function listLoans(): LoanWithDetails[] {
+  const rows = db
+    .prepare(`${LOAN_SELECT} ORDER BY l.date DESC, l.id DESC`)
+    .all() as LoanRawRow[];
+  return rows.map(withLoanRemaining);
+}
+
+export function listLoansByCaisse(caisseId: number): LoanWithDetails[] {
+  const rows = db
+    .prepare(`${LOAN_SELECT} WHERE l.caisse_id = ? ORDER BY l.date DESC, l.id DESC`)
+    .all(caisseId) as LoanRawRow[];
+  return rows.map(withLoanRemaining);
 }
 
 export function getLoan(id: number): LoanWithDetails | undefined {
-  const row = db
-    .prepare(
-      `SELECT l.*, c.name as contact_name,
-              COALESCE((SELECT SUM(amount) FROM loan_repayments r WHERE r.loan_id = l.id), 0) as repaid
-       FROM loans l
-       JOIN contacts c ON c.id = l.contact_id
-       WHERE l.id = ?`
-    )
-    .get(id) as (Loan & { contact_name: string; repaid: number }) | undefined;
+  const row = db.prepare(`${LOAN_SELECT} WHERE l.id = ?`).get(id) as
+    | LoanRawRow
+    | undefined;
   if (!row) return undefined;
-  return { ...row, remaining: Math.round((row.amount - row.repaid) * 100) / 100 };
+  return withLoanRemaining(row);
 }
 
 export function listRepayments(loanId: number): LoanRepayment[] {
@@ -236,15 +257,23 @@ export function createLoan(input: {
   direction: LoanDirection;
   contactName: string;
   contactPhone?: string;
+  caisseId: number;
   amount: number;
   date: string;
   description: string | null;
 }) {
   const contactId = findOrCreateContact(input.contactName, input.contactPhone);
   db.prepare(
-    `INSERT INTO loans (direction, contact_id, amount, date, description)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(input.direction, contactId, input.amount, input.date, input.description);
+    `INSERT INTO loans (direction, contact_id, caisse_id, amount, date, description)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    input.direction,
+    contactId,
+    input.caisseId,
+    input.amount,
+    input.date,
+    input.description
+  );
 }
 
 export function addRepayment(input: {
